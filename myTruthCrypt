@@ -1,0 +1,621 @@
+#!/bin/sh
+# myTruthCrypt ver 0.1, Copyright 2016,2017,2018 notice-dev at alexx dot net, MIT Licence ver 1.0
+# rdfa:deps="[cryptsetup, whoami, head, base64, sed, cut, dmesg, sudo, umount, losetup, df, awk, tail, grep, ls, dd, e2fsck, mke2fs,argon2,/dev/urandom,tr,sha1sum]"
+
+##################################
+### dm-crypt default variables ###
+##################################
+
+disk_img=.encryptedVol_500M_001  # what to call the encrypted storage object
+mount_point=~/export    # where to attach the decrypted image for actual use
+smb=~/.smb              # Where we store the encrypted images. MUST be +read+write. 
+            # Something like Samba, NFS, GlusterFS, CephFS or tahoe-lafs might work.
+#size=1048576            # in Mb, this is 1Tb
+size=500            # in Mb, this is 500Mb
+
+#
+# You can duplicate this file and change the disk_img to create a new encrypted container
+# If you change any of these 4 variables for an existing disk_img you may be permenantly locked out! (As any of them may be used to stretch the passphrase.)
+# That said, it is NOT enough if you WANT to lock youself out. For that you should prune the management variables from the end of this script.
+#  (remove everything after "cut here for tears" )
+# 
+
+### You should not need to change anything after here, but please do read through the following poridge.
+### (You are encoraged to take any chunks that help you protect your data and that of your clients, friends, family.)
+
+user=$(whoami)          # used by chown
+cryptsetup=$(sudo which cryptsetup 2>/dev/null)
+if [ ! "$cryptsetup" ]; then echo "Please install cryptsetup :"; echo " sudo apt-get install -y cryptsetup ; sudo yum install -y cryptsetup"; exit; fi
+
+DEBUG=0
+#################################
+### Key management variables ###
+#################################
+
+ini_h='__HMAC__' # could just as well be '[HMAC]'
+ini_k='__KEY__'
+ini_y='__YEK__'  #encrypted KEY
+ini_c='__CAMH__' #encrypted HMAC
+ini_s='__SALT__'
+#ini_t='__TLAS__' #encrypted salt
+#RND_bytesize=1024
+RND_bytesize=734 # no idea why this is the upper limit
+#RND_count=4     # how many times we collect RND_bytesize
+RND_max=100000 # check for spuriously long encrypted keys
+#ROUNDS_HMAC=1
+
+#################
+### functions ###
+#################
+
+##http://www.etalabs.net/sh_tricks.html
+## recreating echo -n
+##echo () { printf %s "$*" ; }
+#echo () {
+#fmt=%s end=\\n IFS=" "
+#while [ $# -gt 1 ] ; do
+#  case "$1" in
+#    [!-]*|-*[!ne]*) break ;;
+#    *ne*|*en*) fmt=%b end= ;;
+#    *n*) end= ;;
+#    *e*) fmt=%b ;;
+#  esac
+#shift
+#done
+#printf "$fmt$end" "$*"
+#}
+# NTS you are trying to fix the "SC2039: In POSIX sh, echo flags are undefined."
+
+cron=$(tty -s;echo $?)
+is_a_number () {
+   if [ "$1" -eq "$1" ] 2>/dev/null || echo "$1" | grep -q '^-*[0-9]*\.*[0-9]*$';then
+      if ! echo "$1" | grep -q '^--' && ! echo "$1" | grep -q '\.\.';then #check that we don't have -- or ..
+         echo 1
+      fi
+   fi
+}
+
+log() {
+  if [ "$cron" ] && [ "$cron" -eq 1 ] && [ "$DEBUG" ] && [ "$DEBUG" -lt 1 ];then
+    echo -n ''
+  else
+    if [ "$2" ]&&[ "$(is_a_number "$1")" ]&&[ "$1" -eq 1 ]; then
+      shift
+      echo "$@"
+    elif [ "$2" ]&&[ "$(is_a_number "$1")" ]&&[ "$1" -eq 2 ]; then
+      shift
+      echo "$@" >&2
+    elif [ ! "$(is_a_number "$1")" ]; then
+      echo "$@" >&2
+    fi
+  fi
+}
+
+say(){
+    if [ $DEBUG -gt 1 ]; then
+        echo "$@"
+    fi
+}
+
+stretch_password(){
+ # do we use s-crypt or b-crypt? 
+ ARGON_TWO=$(which argon2)
+ if [ "$ARGON_TWO" ]; then
+   if [ "$1" ]; then
+      if [ "$2" ]; then
+         SALT=$1
+         shift
+      else
+         maybe_salt=$(retrieve "${ini_s}")
+         #maybe_tlas=$(retrieve "${ini_t}") #later we can encrypt the salt with a stretched_passphrase for AES (recursion trap?)
+         if [ "$maybe_salt" ] && [ "$maybe_salt" != '' ];then
+            SALT=$maybe_salt
+         else
+            SALT=$(env LC_CTYPE=C tr -cd 'a-z0-9' < /dev/urandom | head -c 8)
+            say "$(store "${ini_s}" "$SALT")"
+         fi
+      fi
+      while [ "$(echo "$SALT"|wc -c)" -lt 18 ];do SALT="$SALT$SALT";done
+      echo "$@" | argon2 "$SALT" -t 13 -m 13 -p 1 -l 64 -r
+   else
+      maybe_salt=$(retrieve "${ini_s}")
+      if [ "$maybe_salt" ] && [ "$maybe_salt" != '' ];then
+         DYN_SALT=$maybe_salt
+      else
+         #DYN_SALT=($(echo -n "$user$disk_img$size$mount_point$smb"|sha1sum)) #bash arrays rock
+         #say $(store "${ini_s}" "${DYN_SALT[0]}")
+         DYN_SALT=$(echo "$user$disk_img$size$mount_point$smb"|sha1sum|awk '{print $1}')
+         say "$(store "${ini_s}" "${DYN_SALT}")"
+      fi
+      echo "$@" | argon2 "${DYN_SALT}" -t 13 -m 13 -p 1 -l 64 -r
+   fi
+ else
+   SHA1SUM=$(which sha1sum)
+   if [ -e "$SHA1SUM" ]; then
+      #DYN_SALT=($(echo -n "$@$user$disk_img$size$mount_point$smb"|sha1sum))
+      #echo -n ${DYN_SALT[0]}
+      DYN_SALT=$(echo "$*$user$disk_img$size$mount_point$smb"|sha1sum|awk '{print $1}')
+      echo "$DYN_SALT"
+      #does the new line add entropy? Does it increase the chances of errors? Does it hamper cracking even a little bit?
+   else
+      #For now we just tripple the password
+      echo "$1$1$1"
+      # We should advise them to 
+      # sudo apt-get install -y argon2 # or just try to install it for them?
+      # we are trying to make this as "no thinking required" as possible.
+   fi
+  fi #end if argon2
+}
+
+enc_pass(){
+    # encrypt THIS with THAT
+    key="$(echo -n "$@"|awk '{print $NF}')"
+    if [ "$key" ]&&[ "$key" != '' ]; then
+      pass=$(echo "$1"|tr '\n' ' ')
+      pass="$(echo "$1"|sed "s/$key//"|tr -d ' ')"
+    else
+      pass="$1"
+    fi
+    if [ ! "$pass" ]; then 
+      pass="$1"
+    fi
+    if [ ! "$key" ]||[ ! "$pass" ];then
+      log 2 "We can not encrypt :${pass}: using :${key}:"
+      exit 3
+    fi
+    echo "$pass"|openssl enc -aes-256-cbc -a -salt -pass pass:"$key"
+}
+
+dec_pass(){
+    # decrypt THIS with THAT
+    #enc=$1 # enciphered string
+    #key=$2
+    #key=${@: -1} #bashism
+    key="$(echo "$@"|awk '{print $NF}')"
+    #enc=${@:1:$(($#-1))} # enciphered string  #bashism
+    enc="$(echo "$@"|sed "s/$key//"|tr -d ' ')"
+    # "bad magic number" means it failed to decrypt
+    pass=$(echo "$enc"|openssl enc -d -aes-256-cbc -a -salt -pass pass:"$key" 2>/dev/null)
+    if [ $? -eq 0 ]; then echo -n "$pass"; fi
+}
+
+store(){
+    #NTS check that $USER has write premission
+    #"Attaching the data in $1:$2 at the end of $0"
+    type="$1"
+    data=$(echo "$2"|tr -d '\n')
+    echo "${type}" >> "$0"
+    echo "${data}" >> "$0"
+}
+
+remove_from_store(){
+  # clear an unencrypted version
+ if [ "$(grep -qE "^$1" "$0" && echo 1 || echo 0)" -eq 1 ];then
+  TMP_FILE=.removing_$1_from_$(basename "$0")
+  while read -r line; do
+    #[[ ! $line =~ $1 ]] && echo "$line"    #bashism
+    # would case be more portable?
+    #case "$line" in
+    #  $1)  echo OK ;;
+    #  *) echo fail ;;
+    #esac
+    if echo "$line" | grep -q "$1"; then
+        SKIP_NEXT_LINE_AS_WELL=1
+    elif [ "$SKIP_NEXT_LINE_AS_WELL" ] && [ "$SKIP_NEXT_LINE_AS_WELL" -eq 1 ]; then
+        SKIP_NEXT_LINE_AS_WELL=0
+    else
+      echo "$line"
+    fi
+  done <"$0" > "$TMP_FILE"
+  chmod --reference="$0" "$TMP_FILE"
+  # chmod $( stat -f '%p' "$0" ) "$TMP_FILE"
+  mv "$TMP_FILE" "$0" || echo "$0 remove function had a glitch"
+ fi
+}
+
+retrieve(){
+    type=$1
+    #echo $(sed -e "0,/^${type}/d" -e '/^__/,$d' "$0")
+    ##return $(sed '0,/^${type}$/d' "$0")
+    return="$(sed -e "0,/^${type}/d" -e '/^__/,$d' "$0")"
+    if [ $? -eq 0 ] && [ ${#return} -gt 0 ] && [ ${#return} -lt $RND_max ];then
+        echo "$return"
+    #else
+        #echo "Failed to find $type"
+        #exit 1
+    fi
+}
+
+randomish(){
+    #CHUNK_OF_RANDOM="./.$(basename $0)_$$.random"
+    #dd if=/dev/urandom of=$CHUNK_OF_RANDOM bs=$RND_bytesize count=$RND_count 2>/dev/null
+    #ps auwx|gzip -c|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'|cut -c1-$RND_bytesize >> $CHUNK_OF_RANDOM
+    ##ps auwx|gzip -c|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'|cut -c1-1023|base64|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g' >> $CHUNK_OF_RANDOM
+    head -n12 /dev/urandom|base64|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n//g'|cut -c1-$RND_bytesize
+    #cat $CHUNK_OF_RANDOM|base64|sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ /g'|cut -c1-$RND_bytesize
+    #unlink $CHUNK_OF_RANDOM
+    # we should create a PCG_RAMDOM function and use that
+}
+
+unmount(){
+    # ./myTruthCrypt -u [mount_point|device]
+    if [ "$2" ]; then
+        #for mount_point in "${@:2:$#}";do #bashism
+        COUNT=0
+        for mount_point in "$@";do
+          COUNT=$((COUNT+1))
+          [ "$COUNT" -lt 2 ] && continue
+            # we have to find the matching loop and encryptedVolume, and then do
+            # NTS not generalised
+            mp=$(df|grep "$mount_point"|awk '{print $NF}')
+            vol=$(df|grep "$mount_point"|awk '{print $1}')
+            if [ "$mp" ]; then
+               LOOPBACK=$(sudo cryptsetup status "$(df -h|grep "$mount_point"|awk '{print $1}')"|grep device|awk '{print $NF}')
+               sudo umount "$mp"
+               sudo "$cryptsetup" remove "${vol##*/}"
+               #sudo /sbin/losetup -d $(sudo $cryptsetup status $vol|grep device|awk '{print $NF}') #can't use cryptsetup if we have already removed it!
+               sudo /sbin/losetup -d "$LOOPBACK"
+            else
+               LOOPBACK=$(sudo cryptsetup status "$(df -h|grep "$mount_point"|awk '{print $1}')"|grep device|awk '{print $NF}')
+               sudo umount "$mount_point"
+               sudo "$cryptsetup" remove "$(df -h|grep "$mount_point"|awk '{print $1}')"
+               if [ "$LOOPBACK" ]; then
+                  sudo /sbin/losetup -d "$LOOPBACK"
+               fi
+            fi
+        done
+    else
+         # this is for when we just need to run and hide (umount everything)
+        say "Running and hiding"
+        hide
+    fi
+}
+
+hide(){
+   # N.B. this will agressively try to umount ALL encrypted containers
+    for i in $(df -h|grep enc|awk '{print $1}'); do sudo umount "$i"; done
+    #ls /dev/mapper/encrypted* 2>/dev/null 1>/dev/null || echo "The Truth (tm) does not exist" && exit 5;
+    #for i in `ls /dev/mapper/encrypted* 2>/dev/null || unmounted=5 && exit 5`; do sudo $cryptsetup remove $i; done || echo "Nothing mounted";
+    say "unmapping /dev/mapper/${disk_img##.}* using the hide function"
+    for i in /dev/mapper/${disk_img##.}*; do sudo "$cryptsetup" remove "$i"; done
+    if [ $? -ne 0 ]; then echo "Nothing mounted"; exit; fi
+    #if [ $unmounted ]; then echo "Nothing mounted"; exit; fi
+    for i in $(sudo losetup|awk '{print $1}'); do sudo losetup -d "$i" 2>/dev/null; done
+    say "Truly unmounted"
+}
+
+mounted(){
+   if [ "$1" ]; then
+      # we search for the $disk_img (which should be unique - hmm NTS maybe we should have the option of adding a timestamp to that?)
+      # would: 
+      #  sudo losetup|grep "$1"|awk '{print $1}'
+      # work?
+      STATE=$(sudo losetup|grep "$1"|awk '{print $1}')
+      echo "$STATE"
+   fi
+}
+
+mapped(){
+    if [ "$1" ]; then
+       ls "/dev/mapper/$1" 2>/dev/null
+    else
+       ls "/dev/mapper/${disk_img##.}" 2>/dev/null
+    fi
+}
+
+loop_to_mapper(){
+    # find which mapper is connected to /dev/loop{0..99}
+    for i in /dev/mapper/encryptedVolume*;do sudo "$cryptsetup" status "$i" |grep -q "$1" && echo "$i";done
+}
+
+key=$(retrieve "${ini_k}")
+yek=$(retrieve "${ini_y}")
+hmac=$(retrieve "${ini_h}")
+camh=$(retrieve "${ini_c}")
+if [ ! "$hmac" ] && [ ! "$camh" ]; then
+    hmac=$(randomish)
+fi
+
+if [ ! "$1" ]; then
+    if [ ! "$key" ] && [ ! "$yek" ]; then # we have never set a passphrase
+        #echo "key: $key yek: $yek"
+        echo "Welcome: Generating secure key"
+        key=$(randomish)
+        fsp=$key
+        while [ "$psf" != "$fsp" ]; do 
+            echo "Please enter the IDENTICAL really STRONG passphrase"
+            #read -r -s -p "Enter new Password: " psf
+            printf "Enter new Password: "
+            [ -t 0 ] && stty -echo
+            read -r psf
+            [ -t 0 ] && stty echo
+            echo ""
+            #read -r -s -p "And again, for safety: " fsp
+            printf "And again, for safety: "
+            [ -t 0 ] && stty -echo
+            read -r fsp
+            [ -t 0 ] && stty echo
+            echo ""
+        done
+    else
+        #echo "key: $key yek: $yek"
+        # nice clean bashism... or
+        #read -s -p "Enter Password: " psf  
+        #... with shellcheck and dash...
+        [ -t 0 ] && printf "Enter Password: "
+        [ -t 0 ] && stty -echo
+        read -r psf
+        [ -t 0 ] && stty echo
+        [ -t 0 ] && echo ""
+    fi
+else
+    #if echo "$1"|grep -qiE '^-?u(nmount)?(mount)?$'; then #some platforms don't support grep -iE
+    if [ "$1" != '-U' ] && [ "$1" != "-u" ] && [ "$1" != "-umount" ] && [ "$1" != "-unmount" ] && [ "$1" != 'umount' ] && [ "$1" != 'unmount' ] && [ "$1" != 'u' ] && [ "$1" != 'U' ]; then
+         # covering the crazy situation where the passphrase is entered as the argument? DO NOT DO THIS!
+        psf="$1"
+    else
+        # check if the pass has been piped into stdin
+        [ ! -t 0 ] && user_entered_key="$(cat)"
+        if [ ! "$user_entered_key" ]; then
+          #read -r -s -p "Please enter the passphrase to unmount $mount_point : " user_entered_key
+          printf "Please enter the passphrase to unmount %s: " "$mount_point"
+          [ -t 0 ] && stty -echo
+          read -r user_entered_key
+          [ -t 0 ] && stty echo
+          [ -t 0 ] && echo ""
+        fi
+        relock='' #if they don't enter a passphrase then its probably an emergency and we should just crash out, risking lost data
+        psf=$(stretch_password "$user_entered_key"|tr -d '\n')
+        relock=$(dec_pass "${yek}" "$psf")
+        attempts=0
+        #while [ "$user_entered_key" != "$relock" ]; do 
+        while [ "$relock" = '' ]; do 
+            attempts=$((attempts+1))
+            #read -r -s -p "Enter new Password: " user_entered_key
+            [ -t 0 ] && printf "Enter Password again: "
+            [ -t 0 ] && stty -echo
+            read -r user_entered_key
+            [ -t 0 ] && stty echo
+            psf=$(stretch_password "$user_entered_key"|tr -d '\n')
+            relock=$(dec_pass "${yek}" "$psf")
+            if [ "$attempts" -gt 3 ]; then echo "Guess you shouldn't be messing where you've been-a-messing."; exit 63; fi
+        done
+        if [ "$(mounted $disk_img)" ]; then
+          say "$(unmount -u "$mount_point")" # we don't just say it, we actually do it. (and more unmount() removes the loopback and container from cryptsetup
+         # here we check IF it is mounted before trying to umount NTS (one day)
+        #sudo umount $mount_point
+        #sudo /sbin/cryptsetup remove encryptedVolume
+        #sudo /sbin/losetup -d $dev
+        rmdir "$mount_point" 2>/dev/null # we probably don't want this in future version where users can  mount multiple containers in $mount_point/$disk_img/
+        echo "$mount_point unmounted (hope no one was writing to that.)"
+        else
+         mounted "$mount_point"
+         mounted "$disk_img"
+         echo "No one saw anything, (you didn't just try to umount something that wasn't mounted in the first place. U still coo!)"
+        fi
+        exit
+    fi
+    if [ ! "$key" ] && [ ! "$yek" ]; then # we have never set a passphrase
+        key=$(randomish)
+    fi
+fi
+
+psf=$(stretch_password "$psf"|tr -d '\n')
+
+if [ ! "$key" ] && [ ! "$yek" ]; then # we have never set a passphrase
+    # We use the password (after stretching it)
+    # to encrypt the KEY (creating YEK)
+    # and to create CAMH from HMAC
+    #echo $(store "${ini_k}" "$key")  ##### THIS IS INSECURE #####
+    if [ ! "$camh" ] && [ "$hmac" ];then
+        camh=$(enc_pass "${hmac}" "${psf}"|tr -d ' ')
+    fi
+    if [ ! "$camh" ] && [ ! "$hmac" ];then
+        hmac=$(randomish)
+        camh=$(enc_pass "${hmac}" "${psf}"|tr -d ' ')
+        say "$(store "${ini_c}" "$camh")"
+    fi
+    if [ "$key" ] && [ ! "$yek" ]; then
+        yek=$(enc_pass "${key}" "${psf}"|tr -d ' ')
+    fi
+    say "$(store "${ini_y}" "$yek")"
+    #echo $(store "${ini_h}" "$hmac")
+    say "$(store "${ini_c}" "$camh")"
+else
+    #echo "key: $key yek: $yek"
+    if [ ! "$key" ] && [ "$yek" ];then
+        key=$(dec_pass "${yek}" "${psf}")
+        if [ ! "$key" ]; then 
+            echo "'error reading input file' means your version of openssl is out of date (come ON CentOFF - #GWTP)" >&2
+            echo "Failed to decrypt the key using that passphrase - that's what 'bad magic number' is telling you" >&2
+            exit; fi
+        if [ ! "$camh" ] && [ "$hmac" ]; then
+            camh=$(enc_pass "${hmac}" "${psf}"|tr -d ' ')
+            say "$(store "${ini_c}" "$camh")"
+            ## and then we should remove the clear-text HMAC
+            #echo $(remove_from_store "${ini_h}")
+        fi
+        if [ "$camh" ]; then
+            hmac=$(dec_pass "${camh}" "${psf}")
+            #echo "
+            # got $hmac 
+            #from $camh"
+        fi
+    else
+        if [ ! "$camh" ] && [ "$hmac" ]; then
+            say "no camh so creating it from $hmac";
+            camh=$(enc_pass "${hmac}" "${psf}"|tr -d ' ')
+            say "$(store "${ini_c}" "$camh")"
+            ## and then we should remove the clear-text HMAC
+            #echo $(remove_from_store "${ini_h}")
+        fi
+    fi
+    if [ "$key" ] && [ ! "$yek" ]; then
+        #echo "we THINK we have a key ($key) but no yek ($yek)"
+        yek=$(enc_pass "${key}" "${psf}"|tr -d ' ')
+        say "$(store "${ini_y}" "$yek")"
+        ## and then we should remove the insecure key
+        #echo $(remove_from_store "${ini_k}")
+    fi
+fi
+#printf 'key=%s\nhmac=%s\n' "$key" "$hmac"
+#echo "Your passphrase is: $key (encrypted by $psf)"
+
+#################################
+### dm-crypt code starts here ###
+#################################
+
+dev_exists=0
+map_vol=1
+# check if the image is already looped
+if [ "$(sudo losetup|grep "$smb/$disk_img"|awk '{print $1}')" ]; then
+    say "sudo losetup|grep $smb/$disk_img seems to think that  losetup has done its job"
+    dev=$(sudo losetup|grep "$smb/$disk_img"|awk '{print $1}'|head -n1)
+    dev_exists=1
+    # soo if the dev_exists the mapper migth also
+    enc_path=$(loop_to_mapper "$dev")
+    enc_vol=${enc_path##*/}     # basename is probably faster
+    #enc_vol=$(basename $enc_path)
+    if [ "$enc_vol" ]; then 
+        map_vol=0
+    fi
+else
+    #dev=/dev/loop$(( $(ls /dev/loop* 2>/dev/null|wc -l) + 1 ))  # slight race-condition issue
+    dev=$(sudo losetup -f)
+fi
+
+
+if [ $map_vol -gt 0 ]; then
+    #enc_vol=encryptedVolume$(( $(ls /dev/mapper/encryptedVolume* 2>/dev/null|wc -l) + 1 ))  # slight race-condition issue
+    enc_vol=encryptedVolume$(( $(find /dev/mapper/ -name "encryptedVolume*" 2>/dev/null|wc -l) + 1 ))  # slight race-condition issue
+fi
+
+create_img=0
+
+if [ ! -d "$smb" ]
+then
+    #read -r -p "  $smb not found, Shall I create it for you? " yes  # [y|yes|Y|YES|oui] : *
+    [ -t 0 ] && printf " %s not found, Shall I create it for you? " "$smb"
+    read -r yes
+
+    #echo ""
+    #if [ "$(grep -Ei 'oui|y' <<< "$yes" 2>/dev/null && echo 1)" ]; then #bashism
+    if echo "$yes"|grep -qiE 'o(ui)?|y(es)?'; then
+        mkdir -p "$smb" || exit
+    else
+        echo "You might want to check your NAS"
+        exit
+    fi
+fi
+
+if [ ! -f "$smb/$disk_img" ]
+then
+    echo -n "  no disk img $smb/$disk_img ; ";
+    #read -r -p "Shall I create it for you? " yes  # [y|yes|Y|YES|oui] : *
+    [ -t 0 ] && printf "Shall I create it for you? "
+    read -r yes
+    [ -t 0 ] && echo ""
+    #if [ "$(grep -Ei 'oui|y' <<< "$yes" 2>/dev/null && echo 1)" ]; then  #bashism
+    if echo "$yes"|grep -qEi 'o(ui)?|y(es)?'; then
+        sudo dd if=/dev/urandom of=$smb/$disk_img seek=$size bs=1M count=0 2>/dev/null 1>/dev/null
+         # should be be using PCG-random?
+        create_img=1
+        sudo chmod 0600 $smb/$disk_img
+    else
+        echo "ok, quitting"
+        exit
+    fi
+fi
+
+if [ $dev_exists -ne 1 ]; then
+    if [ ! -e "$dev" ];then
+        echo "creating loop block device ${dev##*loop} for $dev"
+        sudo mknod -m 0660 "$dev" b 7 "${dev##*loop}" 2>/dev/null
+        #sudo /sbin/losetup -f
+    fi
+    sudo /sbin/losetup "$dev" "$smb/$disk_img"
+else
+    log 1 "$dev already setup for $smb/$disk_img"
+fi
+
+if [ "$key" ] && [ "$hmac" ] && [ ! "$(mapped $enc_vol)" ]; then
+  while [ ! -e "/dev/mapper/$enc_vol" ]; do
+    echo "$key"|openssl dgst -sha512 -hmac "$hmac"|awk '{print $NF}'| \
+sudo "$cryptsetup" -c aes-cbc-essiv:sha256 create "$enc_vol" "$dev"
+    sleep 1
+  done
+fi
+
+# we should fsck /dev/mapper/$enc_vol and if it fails check to see if 
+# we need to format it, (we could have died in the middle for creating it)
+# N.B. MUST be very careful not to delete data!!!!!!
+
+# it seems that this isn't being caught properly anymore, during first creation
+if [ "$create_img" -gt 0 ]
+then
+    #mke2fs_opt=' -t ext3 '
+    mke2fs_opt=''
+    if [ -e "/dev/mapper/$enc_vol" ]; then
+      log 3 "Going to format /dev/mapper/$enc_vol"
+      #sudo /sbin/mke2fs $mke2fs_opt -j "/dev/mapper/$enc_vol" 1>/dev/null
+      #sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" "$mke2fs_opt" 1>/dev/null
+      say "sudo /sbin/mke2fs -j /dev/mapper/$enc_vol "
+      # its possible that the mknod or disk aren't ready, so as a fudge we foramat 
+      #  again to ensure that it is super special formatted.
+      #if echo "$(file -bL /dev/mapper/encryptedVolume2|awk '{print $1 " " $2}')"|grep -qE '^block special'; then
+      # this feels fragile
+      if echo "$(file -bL /dev/mapper/$enc_vol)"|grep -qE '^block special'; then
+        sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" 
+      fi
+    else
+      log 2 "We are meant to format /dev/mapper/$enc_vol but it seems to be missing"
+    fi
+fi
+
+
+# check that the formattting worked
+sudo fsck -pc "/dev/mapper/$enc_vol" 2>/dev/null 1>/dev/null
+if [ $? -eq 8 ]; then
+  if [ "$create_img" -gt 0 ]
+    [ -t 0 ] && printf "Should we format %s ? " "/dev/mapper/$enc_vol" 
+  else
+    [ -t 0 ] && printf "[WARNING] Should we format %s and destroy ALL data that it contains? (Probably a bad idea!) " "/dev/mapper/$enc_vol" 
+  fi
+  read -r live_dangerously
+  if echo "$live_dangerously"|grep -qiE 'o(ui)?|y(es)?'; then
+    sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" 
+  fi
+fi
+
+if [ ! -d "$mount_point" ]
+then
+   log 3 "Creating $mount_point"
+   mkdir -p "$mount_point"
+   if [ ! -d "$mount_point" ]; then
+      echo "FAILED to create $mount_point" >&2
+      exit 1
+   fi
+fi
+
+if [ -e "/dev/mapper/$enc_vol" ] && [ -d "$mount_point" ]; then
+    
+    sudo mount /dev/mapper/$enc_vol "$mount_point"
+    if [ $? -ne 0 ]; then
+        echo "We were unable to mount /dev/mapper/$enc_vol \"$mount_point\" maybe it requires formatting with: "
+        echo "sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" "
+        echo "N.B. If it is damaged then this will WIPE ALL OF YOUR DATA! "
+        exit 98
+    fi
+    sudo chown "$user": "$mount_point"
+else
+    log 2 "Missing /dev/mapper/$enc_vol or $mount_point"
+fi
+
+exit
+###############################
+### dm-crypt code ends here ###
+###############################
+
+######################
+# cut here for tears #
+######################
