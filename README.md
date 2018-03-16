@@ -5,16 +5,18 @@
 3. install dependends: sudo apt-get install -y bash sed util-linux cryptsetup e2fsprogs coreutils dmesg losetup awk argon2 tr sha1sum
 
 { optional
+
   4. Open myTruthCrypt in a text editor
   5. Edit the size of the container (size= Number of Megabytes)
   6. Check that you are happy with the name for the file that will contain your encrypted stuff, ( disk_img )
   7. change the ( mount_point ) if you want your encrypted file system located somewhere else
   8. ensure that you have can read and write to ( smb ) (where the encrypted file will live while in use
+
 }
 
 9. Save myTruthCrypt and run it.
 
-If you do nothing and run myTruthCrypt it will:
+If you do nothing and run `myTruthCrypt` it will:
   create a 500Mb file called .encryptedVol_500M_001 in ~/.smb
   and mount it on ~/export where you can use it like any regular directory.
 
@@ -28,7 +30,7 @@ N.B. Ensure that you have a backup of the myTruthCrypt script, (as it will conta
 to lock your TruthCrypt, (also make sure that you have something that backs up ~/.smb/.encryptedVol_500M_001
 because if that is damaged you may loose all of the files that it contains.)
 
-N.N.B. There is NO recovery procedure and no backdoor, (that I can find.)
+N.N.B. There is NO recovery procedure and no backdoor, (that I can find) faster than bruit-force.
 
 It is recommended that you have your password created with something like:
 
@@ -58,8 +60,8 @@ This version uses:
 * sudo    >= 1.8.10p3
 * OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
 
- ... # Though you can use camellia256 cast blowfish seed, or implement them natively or use
- ... # (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
+ ...# Though you can use camellia256 cast blowfish seed, or implement them natively or use
+ ...# (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
 * util-linux  >= 2.25.2 # losetup, umount
 * cryptsetup  >= 1.6.6
 * e2fsprogs   >= 1.42.12 # mke2fs
@@ -72,9 +74,9 @@ This version uses:
 # recomended #
 * argon2 (for passphrase stretching) or scrypt, (or in a pinch bcrypt)
 
- ... myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
+ ...myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
 
- ... (though obviously not for existsing containers as that will lock you out.)
+ ...(though obviously not for existsing containers as that will lock you out.)
 
 * /dev/urandom  # just letting future me know for your SELinux config
 Though older versions may work, and future developers may break backward compatibility, it works for now.
