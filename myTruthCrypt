@@ -1,5 +1,5 @@
 #!/bin/sh
-# myTruthCrypt ver 0.1, Copyright 2016,2017,2018 notice-dev at alexx dot net, MIT Licence ver 1.0
+# myTruthCrypt ver 0.2, Copyright 2016,2017,2018 notice-dev at alexx dot net, MIT Licence ver 1.0
 # rdfa:deps="[cryptsetup, whoami, head, base64, sed, cut, dmesg, sudo, umount, losetup, df, awk, tail, grep, ls, dd, e2fsck, mke2fs,argon2,/dev/urandom,tr,sha1sum]"
 
 ##################################
@@ -577,9 +577,9 @@ fi
 sudo fsck -pc "/dev/mapper/$enc_vol" 2>/dev/null 1>/dev/null
 if [ $? -eq 8 ]; then
   if [ "$create_img" -gt 0 ]; then
-    [ -t 0 ] && printf "Should we format %s ? " "/dev/mapper/$enc_vol" 
-  else
     [ -t 0 ] && printf "[WARNING] Should we format %s and destroy ALL data that it contains? (Probably a bad idea!) " "/dev/mapper/$enc_vol" 
+  else
+    [ -t 0 ] && printf "Should we format %s ? " "/dev/mapper/$enc_vol" 
   fi
   read -r live_dangerously
   if echo "$live_dangerously"|grep -qiE 'o(ui)?|y(es)?'; then
