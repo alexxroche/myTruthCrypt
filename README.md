@@ -2,6 +2,7 @@
 
 1. download myTruthCrypt: wget https://raw.githubusercontent.com/alexxroche/myTruthCrypt/master/myTruthCrypt )
 2. install dependends: sudo apt-get install -y bash sed util-linux cryptsetup e2fsprogs coreutils dmesg losetup awk argon2 tr sha1sum
+
 { optional
   3. Open myTruthCrypt in a text editor
   4. Edit the size of the container (size= Number of Megabytes)
@@ -9,6 +10,7 @@
   6. change the ( mount_point ) if you want your encrypted file system located somewhere else
   7. ensure that you have can read and write to ( smb ) (where the encrypted file will live while in use
 }
+
 8. Save myTruthCrypt and run it.
 
 If you do nothing and run myTruthCrypt it will:
