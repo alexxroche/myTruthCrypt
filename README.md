@@ -52,32 +52,33 @@ Your version may require the ability to mount multiple encrypted containers and 
 
 This version uses:
 
-...bash    >= 4.3.30  || dash >= 0.5.8-2.4 (almost works with ksh and probably works with some other shells)
-...GNU sed >= 4.2.2
-...sudo    >= 1.8.10p3
-...OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
-...# Though you can use camellia256 cast blowfish seed, or implement them natively or use
-...# (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
-...util-linux  >= 2.25.2 # losetup, umount
-...cryptsetup  >= 1.6.6
-...e2fsprogs   >= 1.42.12 # mke2fs
-...GNU coreutils >= 8.23 # head, cut, base64, whoami, dd, mkdir, chown, basename
-...awk
+* bash    >= 4.3.30  || dash >= 0.5.8-2.4 (almost works with ksh and probably works with some other shells)
+* GNU sed >= 4.2.2
+* sudo    >= 1.8.10p3
+* OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
+... # Though you can use camellia256 cast blowfish seed, or implement them natively or use
+... # (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
+* util-linux  >= 2.25.2 # losetup, umount
+* cryptsetup  >= 1.6.6
+* e2fsprogs   >= 1.42.12 # mke2fs
+* GNU coreutils >= 8.23 # head, cut, base64, whoami, dd, mkdir, chown, basename
+* awk
 
-grep rdfa:deps myTruthCrypt #for a full list
+`grep rdfa:deps myTruthCrypt` #for a full list
 #### many could be replaced with bash native, but some portability was felt desirable
 
 # recomended #
-argon2 (for passphrase stretching) or scrypt, (or in a pinch bcrypt)
-#### myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
-#### (though obviously not for existsing containers as that will lock you out.)
+* argon2 (for passphrase stretching) or scrypt, (or in a pinch bcrypt)
+... myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
 
-.../dev/urandom  # just letting future me know for your SELinux config
+... (though obviously not for existsing containers as that will lock you out.)
+
+* /dev/urandom  # just letting future me know for your SELinux config
 Though older versions may work, and future developers may break backward compatibility, it works for now.
 
 ## Install deps ##
 # with something like:
-apt-get update; aptitude install -y coreutils bash sed sudo openssl util-linux cryptsetup e2fsprogs argon2
+apt-get update; aptitude install -y coreutils bash sed sudo openssl util-linux cryptsetup e2fsprogs argon2; 
 yum install -y coreutils bash sed sudo openssl util-linux cryptsetup e2fsprogs argon2
 
 ## Description ##
