@@ -1,17 +1,18 @@
 ## Usage ##
 
 1. download myTruthCrypt: wget https://raw.githubusercontent.com/alexxroche/myTruthCrypt/master/myTruthCrypt )
-2. install dependends: sudo apt-get install -y bash sed util-linux cryptsetup e2fsprogs coreutils dmesg losetup awk argon2 tr sha1sum
+2. fix permission with `chmod 0700 myTruthCrypt`
+3. install dependends: sudo apt-get install -y bash sed util-linux cryptsetup e2fsprogs coreutils dmesg losetup awk argon2 tr sha1sum
 
 { optional
-  3. Open myTruthCrypt in a text editor
-  4. Edit the size of the container (size= Number of Megabytes)
-  5. Check that you are happy with the name for the file that will contain your encrypted stuff, ( disk_img )
-  6. change the ( mount_point ) if you want your encrypted file system located somewhere else
-  7. ensure that you have can read and write to ( smb ) (where the encrypted file will live while in use
+  4. Open myTruthCrypt in a text editor
+  5. Edit the size of the container (size= Number of Megabytes)
+  6. Check that you are happy with the name for the file that will contain your encrypted stuff, ( disk_img )
+  7. change the ( mount_point ) if you want your encrypted file system located somewhere else
+  8. ensure that you have can read and write to ( smb ) (where the encrypted file will live while in use
 }
 
-8. Save myTruthCrypt and run it.
+9. Save myTruthCrypt and run it.
 
 If you do nothing and run myTruthCrypt it will:
   create a 500Mb file called .encryptedVol_500M_001 in ~/.smb
