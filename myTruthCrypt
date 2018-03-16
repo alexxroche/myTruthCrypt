@@ -1,5 +1,5 @@
 #!/bin/sh
-# myTruthCrypt ver 0.2, Copyright 2016,2017,2018 notice-dev at alexx dot net, MIT Licence ver 1.0
+# myTruthCrypt ver 0.3, Copyright 2016,2017,2018 notice-dev at alexx dot net, MIT Licence ver 1.0
 # rdfa:deps="[cryptsetup, whoami, head, base64, sed, cut, dmesg, sudo, umount, losetup, df, awk, tail, grep, ls, dd, e2fsck, mke2fs,argon2,/dev/urandom,tr,sha1sum]"
 
 ##################################
@@ -565,7 +565,7 @@ then
       #if echo "$(file -bL /dev/mapper/encryptedVolume2|awk '{print $1 " " $2}')"|grep -qE '^block special'; then
       # this feels fragile
       if echo "$(file -bL /dev/mapper/$enc_vol)"|grep -qE '^block special'; then
-        sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" 
+        sudo /sbin/mke2fs -j /dev/mapper/$enc_vol
       fi
     else
       log 2 "We are meant to format /dev/mapper/$enc_vol but it seems to be missing"
@@ -575,7 +575,7 @@ fi
 
 # check that the formattting worked
 sudo fsck -pc "/dev/mapper/$enc_vol" 2>/dev/null 1>/dev/null
-if [ $? -eq 8 ]; then
+if [ $? -eq 8 ]&&[ "$DEBUG" -gt 0 ]; then
   if [ "$create_img" -gt 0 ]; then
     [ -t 0 ] && printf "[WARNING] Should we format %s and destroy ALL data that it contains? (Probably a bad idea!) " "/dev/mapper/$enc_vol" 
   else
@@ -604,7 +604,7 @@ if [ -e "/dev/mapper/$enc_vol" ] && [ -d "$mount_point" ]; then
         echo "We were unable to mount /dev/mapper/$enc_vol \"$mount_point\" maybe it requires formatting with: "
         echo "sudo /sbin/mke2fs -j "/dev/mapper/$enc_vol" "
         echo "N.B. If it is damaged then this will WIPE ALL OF YOUR DATA! "
-        exit 98
+        exit 96
     fi
     sudo chown "$user": "$mount_point"
 else
