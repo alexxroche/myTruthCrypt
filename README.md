@@ -19,7 +19,7 @@ If you do nothing and run myTruthCrypt it will:
 
 Once you are done you can "lock" the encryption with:
 
-myTruthCrypt -u
+`myTruthCrypt -u`
 
 This means that you can store 500Mb of your most important files.
 
@@ -52,29 +52,28 @@ Your version may require the ability to mount multiple encrypted containers and 
 
 This version uses:
 
-bash    >= 4.3.30  || dash >= 0.5.8-2.4 (almost works with ksh and probably works with some other shells)
-GNU sed >= 4.2.2
-sudo    >= 1.8.10p3
-OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
-# Though you can use camellia256 cast blowfish seed, or implement them natively or use
-# (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
-util-linux  >= 2.25.2 # losetup, umount
-cryptsetup  >= 1.6.6
-e2fsprogs   >= 1.42.12 # mke2fs
-GNU coreutils >= 8.23 # head, cut, base64, whoami, dd, mkdir, chown, basename
-awk
+...bash    >= 4.3.30  || dash >= 0.5.8-2.4 (almost works with ksh and probably works with some other shells)
+...GNU sed >= 4.2.2
+...sudo    >= 1.8.10p3
+...OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
+...# Though you can use camellia256 cast blowfish seed, or implement them natively or use
+...# (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
+...util-linux  >= 2.25.2 # losetup, umount
+...cryptsetup  >= 1.6.6
+...e2fsprogs   >= 1.42.12 # mke2fs
+...GNU coreutils >= 8.23 # head, cut, base64, whoami, dd, mkdir, chown, basename
+...awk
 
 grep rdfa:deps myTruthCrypt #for a full list
-# many could be replaced with bash native, but some portability was felt desirable
+#### many could be replaced with bash native, but some portability was felt desirable
 
-# recomended
+# recomended #
 argon2 (for passphrase stretching) or scrypt, (or in a pinch bcrypt)
-# myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
-# (though obviously not for existsing containers as that will lock you out.)
+#### myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
+#### (though obviously not for existsing containers as that will lock you out.)
 
-/dev/urandom  # just letting future me know for your SELinux config
-# Though older versions may work, and future developers may break backward compatibility,
-# it works for now.
+.../dev/urandom  # just letting future me know for your SELinux config
+Though older versions may work, and future developers may break backward compatibility, it works for now.
 
 ## Install deps ##
 # with something like:
@@ -99,11 +98,15 @@ just run it. If you want to change the default presumptions then please do; thou
             You should be fairly safe with changing the volume size, but make sure you have enough space.
             It will sometimes happily create a 2048 Terabyte vol on a 64Gig partition; you will lose data if you use that. 
 
+`myTruthCrypt`
+
 ### use ###
 just run it any time, (to mount) though the creation process also mounts and leaves the encrypted container live and ready for use.
 
 ### panic/lock/unmount ###
 run it with -u (actually -umount -unmount -U also work)
+
+`myTruthCrypt -u`
 
 ## What does it actually do? ##
 It is meant to create an encrypted object that can be mounted and used to contain your data. These file containers can then safely be backed up to any old insecure location. (Though unmount them first to be safe.)
@@ -111,28 +114,27 @@ It is meant to create an encrypted object that can be mounted and used to contai
 ############
 ### Bugs ###
 ############
-#
-# TOTALLY fails to check that argon2 output, $key and $hmac are not = '' (which would be bad)
-#
-# says "bad magic number" which isn't helpful to users
-#
-# If you remove the encrypedVol or have someone elses' keys this does not fail cleanly
-#
-# should warn if trying to create a large .encVol 
-# (as it depends upon random-ish data, and can take a while)
+
+* TOTALLY fails to check that argon2 output, $key and $hmac are not = '' (which would be bad)
+
+* says "bad magic number" which isn't helpful to users
+
+* If you remove the encrypedVol or have someone elses' keys this does not fail cleanly
+
+* should warn if trying to create a large .encVol 
+ (as it depends upon random-ish data, and can take a while)
 ############
 ### TODO ###
 ############
-# We should to be able to pass volume_names, volume_sizes, and even passphrases, as arguments
-# [-protect] function that will:
-#  + size up a directory; 
-#  + create a volume big enough to hold it; 
-#  + move the data into it and then create a mount point where the old directory was.
-# There should be a way to be able to update passphrases
-# We need a way to manage multiple volumes. e.g. --mount-all
-#  Check that this works when the .encVol is stored in Tahoe-lafs or glusterfs or ceph
-# 
-
+* We should to be able to pass volume_names, volume_sizes, and even passphrases, as arguments
+* [-protect] function that will:
+  + size up a directory; 
+  + create a volume big enough to hold it; 
+  + move the data into it and then create a mount point where the old directory was.
+* There should be a way to be able to update passphrases
+* We need a way to manage multiple volumes. e.g. --mount-all
+*  Check that this works when the .encVol is stored in Tahoe-lafs or glusterfs or ceph
+ 
 ## Philosophy ##
 Should you create test files and then scrub their key so that everyone else has the same deniability to protect their data?
 
