@@ -576,7 +576,7 @@ fi
 # check that the formattting worked
 sudo fsck -pc "/dev/mapper/$enc_vol" 2>/dev/null 1>/dev/null
 if [ $? -eq 8 ]; then
-  if [ "$create_img" -gt 0 ]
+  if [ "$create_img" -gt 0 ]; then
     [ -t 0 ] && printf "Should we format %s ? " "/dev/mapper/$enc_vol" 
   else
     [ -t 0 ] && printf "[WARNING] Should we format %s and destroy ALL data that it contains? (Probably a bad idea!) " "/dev/mapper/$enc_vol" 
