@@ -44,7 +44,7 @@ This is a sketch of an idea. I wanted to simplify the creation, management and u
 
 The program cryptsetup has done the heavy lifting, so this is just an opinionated wrapper.
 
-Incidentally I wanted to be able to have a perl __DATA__ style in bash, (for which I created an ini style solution, but it is far from perfect.)
+Incidentally I wanted to be able to have a perl `__DATA__` style in bash, (for which I created an ini style solution, but it is far from perfect.)
 That said, this can be ported to your preferred language. Feel free to implement a proper ~/.config/myTrueCrypt style config.
 
 The default is a single self-contained script for creating and mounting a single encrypted container that can be mounted.
