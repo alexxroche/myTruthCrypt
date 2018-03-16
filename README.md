@@ -56,8 +56,9 @@ This version uses:
 * GNU sed >= 4.2.2
 * sudo    >= 1.8.10p3
 * OpenSSL >= 1.0.1t # hmac-sha512, salted-aes-256-cbc, aes-cbc-essiv, hmac-rmd160, 
-... # Though you can use camellia256 cast blowfish seed, or implement them natively or use
-... # (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
+
+ ... # Though you can use camellia256 cast blowfish seed, or implement them natively or use
+ ... # (maybe) https://gitlab.com/gan.xijun/openssl-twofish 
 * util-linux  >= 2.25.2 # losetup, umount
 * cryptsetup  >= 1.6.6
 * e2fsprogs   >= 1.42.12 # mke2fs
@@ -69,9 +70,10 @@ This version uses:
 
 # recomended #
 * argon2 (for passphrase stretching) or scrypt, (or in a pinch bcrypt)
-... myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
 
-... (though obviously not for existsing containers as that will lock you out.)
+ ... myTruthCrypt has some hardcoded argon2 settings. Feel free to ramp those up for your platform
+
+ ... (though obviously not for existsing containers as that will lock you out.)
 
 * /dev/urandom  # just letting future me know for your SELinux config
 Though older versions may work, and future developers may break backward compatibility, it works for now.
@@ -92,7 +94,7 @@ BACKUP is still YOUR top priority. It MUST be automated and should be done when 
 
 ## How to ##
 
-... (create/use/panic/understand)
+ ... (create/use/panic/understand)
 
 ### create ###
 just run it. If you want to change the default presumptions then please do; though you might shoot yourself in the foot if you do, (one of the costs of freedom.)
