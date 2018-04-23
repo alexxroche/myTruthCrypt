@@ -145,3 +145,5 @@ It is meant to create an encrypted object that can be mounted and used to contai
 Should you create test files and then scrub their key so that everyone else has the same deniability to protect their data?
 
 MIT version 1.0 licence
+## Thanks ##
+Jana Saout, for cryptsetup
